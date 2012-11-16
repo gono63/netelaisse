@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+<!-- questions.html -->
+{% load question_list_tags %}
+{% load i18n %}
+{% load extra_tags %}
+{% load general_sidebar_tags %}
+
+{% block title %}{% spaceless %}{{ page_title }}{% endspaceless %}{% endblock %}
+
+{% block metadescription %}{% spaceless %}
+    {% if tag %}
+        {% blocktrans with settings.APP_TITLE as app_title %}Questions and answers about {{ tag }} on {{ app_title }}{% endblocktrans %}
+    {% endif %}
+{% endspaceless %}{% endblock %}
+
+{% block meta %}
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="{{ feed_url }}" />
+{% endblock %}
+
+{% block content %}
+
+<div class="tabBar">
+    {% include "question_list/title.html" %}
+    <a class="feed-icon" style="background-image:url('{% media "media/images/feed-icon-small.png" %}');" href="{{ feed_url }}" title="{% trans "subscribe to question RSS feed" %}"></a>
+    {{ questions.paginator.sort_tabs }}
+</div>
+<div id="listA">{% for question in questions.paginator.page %}
+    {% question_list_item question %}
+{% endfor %}</div>
+{% endblock %}
+
+{% block sidebar %}
+
+{% include "ntlpf_header.html" %}
+
+    {% sidebar_upper %}
+    {% sidebar_lower %}
+
+
+{% endblock %}
+<!-- end questions.html -->

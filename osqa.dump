@@ -1,0 +1,3559 @@
+--
+-- PostgreSQL database dump
+--
+
+SET statement_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET check_function_bodies = false;
+SET client_min_messages = warning;
+
+--
+-- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+
+--
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+
+
+SET search_path = public, pg_catalog;
+
+--
+-- Name: rank_exact_matches(double precision); Type: FUNCTION; Schema: public; Owner: gono63
+--
+
+CREATE FUNCTION rank_exact_matches(rank double precision) RETURNS double precision
+    LANGUAGE plpgsql
+    AS $$
+begin
+	IF rank = 0 THEN
+		return 1;
+	ELSE
+		return rank;
+	END IF;
+
+end
+$$;
+
+
+ALTER FUNCTION public.rank_exact_matches(rank double precision) OWNER TO gono63;
+
+--
+-- Name: rebuild_index(); Type: FUNCTION; Schema: public; Owner: gono63
+--
+
+CREATE FUNCTION rebuild_index() RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+	DECLARE
+		r integer;
+	BEGIN
+		FOR r IN SELECT active_revision_id FROM forum_node WHERE node_type = 'question' LOOP
+			UPDATE forum_noderevision SET id = id WHERE id = r;
+		END LOOP;
+	END
+$$;
+
+
+ALTER FUNCTION public.rebuild_index() OWNER TO gono63;
+
+--
+-- Name: set_doctable_tsv(); Type: FUNCTION; Schema: public; Owner: gono63
+--
+
+CREATE FUNCTION set_doctable_tsv() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  root_id int;
+  doc tsvector;
+  rcount int;
+  cv tsvector;
+begin
+    SELECT abs_parent_id INTO root_id FROM forum_node WHERE id = new.node_id;
+
+    IF root_id IS NULL THEN
+	  root_id := new.node_id;
+    END IF;
+
+    SELECT count(*)::int INTO rcount FROM forum_node WHERE id = root_id;
+
+    IF rcount = 0 THEN
+        return new;
+    END IF;
+
+    SELECT
+      setweight(to_tsvector('english', coalesce(tagnames,'')), 'A') ||
+      setweight(to_tsvector('english', coalesce(title,'')), 'B') ||
+      setweight(to_tsvector('english', coalesce(body,'')), 'C') INTO doc
+      FROM forum_node WHERE id = root_id;
+
+    SELECT count(*)::int INTO rcount FROM forum_node WHERE abs_parent_id = root_id AND (NOT state_string LIKE '%%deleted%%');
+
+    IF rcount > 0 THEN
+       FOR cv in SELECT setweight(to_tsvector('english', coalesce(body,'')), 'C') FROM forum_node WHERE abs_parent_id = root_id  AND (NOT state_string LIKE '%%deleted%%') LOOP
+           doc :=(doc || cv);
+       END LOOP;
+     END IF;
+
+    SELECT count(*)::int INTO rcount FROM forum_rootnode_doc WHERE node_id = root_id;
+
+    IF rcount > 0 THEN
+       UPDATE forum_rootnode_doc SET document = doc WHERE node_id = root_id;
+    ELSE
+       INSERT INTO forum_rootnode_doc (node_id, document) VALUES (root_id, doc);
+    END IF;
+
+  RETURN new;
+end
+$$;
+
+
+ALTER FUNCTION public.set_doctable_tsv() OWNER TO gono63;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: auth_group; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_group (
+    id integer NOT NULL,
+    name character varying(80) NOT NULL
+);
+
+
+ALTER TABLE public.auth_group OWNER TO gono63;
+
+--
+-- Name: auth_group_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_group_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_group_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_group_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_group_id_seq OWNED BY auth_group.id;
+
+
+--
+-- Name: auth_group_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_group_id_seq', 1, false);
+
+
+--
+-- Name: auth_group_permissions; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_group_permissions (
+    id integer NOT NULL,
+    group_id integer NOT NULL,
+    permission_id integer NOT NULL
+);
+
+
+ALTER TABLE public.auth_group_permissions OWNER TO gono63;
+
+--
+-- Name: auth_group_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_group_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_group_permissions_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_group_permissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_group_permissions_id_seq OWNED BY auth_group_permissions.id;
+
+
+--
+-- Name: auth_group_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_group_permissions_id_seq', 1, false);
+
+
+--
+-- Name: auth_message; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_message (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    message text NOT NULL
+);
+
+
+ALTER TABLE public.auth_message OWNER TO gono63;
+
+--
+-- Name: auth_message_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_message_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_message_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_message_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_message_id_seq OWNED BY auth_message.id;
+
+
+--
+-- Name: auth_message_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_message_id_seq', 1283, true);
+
+
+--
+-- Name: auth_permission; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_permission (
+    id integer NOT NULL,
+    name character varying(50) NOT NULL,
+    content_type_id integer NOT NULL,
+    codename character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.auth_permission OWNER TO gono63;
+
+--
+-- Name: auth_permission_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_permission_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_permission_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_permission_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_permission_id_seq OWNED BY auth_permission.id;
+
+
+--
+-- Name: auth_permission_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_permission_id_seq', 96, true);
+
+
+--
+-- Name: auth_user; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_user (
+    id integer NOT NULL,
+    username character varying(30) NOT NULL,
+    first_name character varying(30) NOT NULL,
+    last_name character varying(30) NOT NULL,
+    email character varying(75) NOT NULL,
+    password character varying(128) NOT NULL,
+    is_staff boolean NOT NULL,
+    is_active boolean NOT NULL,
+    is_superuser boolean NOT NULL,
+    last_login timestamp with time zone NOT NULL,
+    date_joined timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.auth_user OWNER TO gono63;
+
+--
+-- Name: auth_user_groups; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_user_groups (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    group_id integer NOT NULL
+);
+
+
+ALTER TABLE public.auth_user_groups OWNER TO gono63;
+
+--
+-- Name: auth_user_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_user_groups_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_user_groups_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_user_groups_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_user_groups_id_seq OWNED BY auth_user_groups.id;
+
+
+--
+-- Name: auth_user_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_user_groups_id_seq', 1, false);
+
+
+--
+-- Name: auth_user_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_user_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_user_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_user_id_seq OWNED BY auth_user.id;
+
+
+--
+-- Name: auth_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_user_id_seq', 2, true);
+
+
+--
+-- Name: auth_user_user_permissions; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE auth_user_user_permissions (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    permission_id integer NOT NULL
+);
+
+
+ALTER TABLE public.auth_user_user_permissions OWNER TO gono63;
+
+--
+-- Name: auth_user_user_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE auth_user_user_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.auth_user_user_permissions_id_seq OWNER TO gono63;
+
+--
+-- Name: auth_user_user_permissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE auth_user_user_permissions_id_seq OWNED BY auth_user_user_permissions.id;
+
+
+--
+-- Name: auth_user_user_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('auth_user_user_permissions_id_seq', 1, false);
+
+
+--
+-- Name: django_admin_log; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE django_admin_log (
+    id integer NOT NULL,
+    action_time timestamp with time zone NOT NULL,
+    user_id integer NOT NULL,
+    content_type_id integer,
+    object_id text,
+    object_repr character varying(200) NOT NULL,
+    action_flag smallint NOT NULL,
+    change_message text NOT NULL,
+    CONSTRAINT django_admin_log_action_flag_check CHECK ((action_flag >= 0))
+);
+
+
+ALTER TABLE public.django_admin_log OWNER TO gono63;
+
+--
+-- Name: django_admin_log_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE django_admin_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.django_admin_log_id_seq OWNER TO gono63;
+
+--
+-- Name: django_admin_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE django_admin_log_id_seq OWNED BY django_admin_log.id;
+
+
+--
+-- Name: django_admin_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('django_admin_log_id_seq', 1, false);
+
+
+--
+-- Name: django_content_type; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE django_content_type (
+    id integer NOT NULL,
+    name character varying(100) NOT NULL,
+    app_label character varying(100) NOT NULL,
+    model character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.django_content_type OWNER TO gono63;
+
+--
+-- Name: django_content_type_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE django_content_type_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.django_content_type_id_seq OWNER TO gono63;
+
+--
+-- Name: django_content_type_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE django_content_type_id_seq OWNED BY django_content_type.id;
+
+
+--
+-- Name: django_content_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('django_content_type_id_seq', 32, true);
+
+
+--
+-- Name: django_session; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE django_session (
+    session_key character varying(40) NOT NULL,
+    session_data text NOT NULL,
+    expire_date timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.django_session OWNER TO gono63;
+
+--
+-- Name: django_site; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE django_site (
+    id integer NOT NULL,
+    domain character varying(100) NOT NULL,
+    name character varying(50) NOT NULL
+);
+
+
+ALTER TABLE public.django_site OWNER TO gono63;
+
+--
+-- Name: django_site_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE django_site_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.django_site_id_seq OWNER TO gono63;
+
+--
+-- Name: django_site_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE django_site_id_seq OWNED BY django_site.id;
+
+
+--
+-- Name: django_site_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('django_site_id_seq', 1, true);
+
+
+--
+-- Name: forum_action; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_action (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    real_user_id integer,
+    ip character varying(39) NOT NULL,
+    node_id integer,
+    action_type character varying(32) NOT NULL,
+    action_date timestamp with time zone NOT NULL,
+    extra text,
+    canceled boolean NOT NULL,
+    canceled_by_id integer,
+    canceled_at timestamp with time zone,
+    canceled_ip character varying(39) NOT NULL
+);
+
+
+ALTER TABLE public.forum_action OWNER TO gono63;
+
+--
+-- Name: forum_action_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_action_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_action_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_action_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_action_id_seq OWNED BY forum_action.id;
+
+
+--
+-- Name: forum_action_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_action_id_seq', 15, true);
+
+
+--
+-- Name: forum_actionrepute; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_actionrepute (
+    id integer NOT NULL,
+    action_id integer NOT NULL,
+    date timestamp with time zone NOT NULL,
+    user_id integer NOT NULL,
+    value integer NOT NULL,
+    by_canceled boolean NOT NULL
+);
+
+
+ALTER TABLE public.forum_actionrepute OWNER TO gono63;
+
+--
+-- Name: forum_actionrepute_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_actionrepute_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_actionrepute_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_actionrepute_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_actionrepute_id_seq OWNED BY forum_actionrepute.id;
+
+
+--
+-- Name: forum_actionrepute_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_actionrepute_id_seq', 2, true);
+
+
+--
+-- Name: forum_authkeyuserassociation; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_authkeyuserassociation (
+    id integer NOT NULL,
+    key character varying(255) NOT NULL,
+    provider character varying(64) NOT NULL,
+    user_id integer NOT NULL,
+    added_at timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.forum_authkeyuserassociation OWNER TO gono63;
+
+--
+-- Name: forum_authkeyuserassociation_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_authkeyuserassociation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_authkeyuserassociation_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_authkeyuserassociation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_authkeyuserassociation_id_seq OWNED BY forum_authkeyuserassociation.id;
+
+
+--
+-- Name: forum_authkeyuserassociation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_authkeyuserassociation_id_seq', 1, false);
+
+
+--
+-- Name: forum_award; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_award (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    badge_id integer NOT NULL,
+    node_id integer,
+    awarded_at timestamp with time zone NOT NULL,
+    trigger_id integer,
+    action_id integer NOT NULL
+);
+
+
+ALTER TABLE public.forum_award OWNER TO gono63;
+
+--
+-- Name: forum_award_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_award_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_award_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_award_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_award_id_seq OWNED BY forum_award.id;
+
+
+--
+-- Name: forum_award_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_award_id_seq', 1, true);
+
+
+--
+-- Name: forum_badge; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_badge (
+    id integer NOT NULL,
+    type smallint NOT NULL,
+    cls character varying(50),
+    awarded_count integer NOT NULL,
+    CONSTRAINT forum_badge_awarded_count_check CHECK ((awarded_count >= 0))
+);
+
+
+ALTER TABLE public.forum_badge OWNER TO gono63;
+
+--
+-- Name: forum_badge_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_badge_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_badge_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_badge_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_badge_id_seq OWNED BY forum_badge.id;
+
+
+--
+-- Name: forum_badge_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_badge_id_seq', 32, true);
+
+
+--
+-- Name: forum_flag; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_flag (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    node_id integer NOT NULL,
+    reason character varying(300) NOT NULL,
+    action_id integer NOT NULL,
+    flagged_at timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.forum_flag OWNER TO gono63;
+
+--
+-- Name: forum_flag_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_flag_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_flag_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_flag_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_flag_id_seq OWNED BY forum_flag.id;
+
+
+--
+-- Name: forum_flag_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_flag_id_seq', 1, false);
+
+
+--
+-- Name: forum_keyvalue; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_keyvalue (
+    id integer NOT NULL,
+    key character varying(255) NOT NULL,
+    value text
+);
+
+
+ALTER TABLE public.forum_keyvalue OWNER TO gono63;
+
+--
+-- Name: forum_keyvalue_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_keyvalue_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_keyvalue_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_keyvalue_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_keyvalue_id_seq OWNED BY forum_keyvalue.id;
+
+
+--
+-- Name: forum_keyvalue_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_keyvalue_id_seq', 158, true);
+
+
+--
+-- Name: forum_markedtag; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_markedtag (
+    id integer NOT NULL,
+    tag_id integer NOT NULL,
+    user_id integer NOT NULL,
+    reason character varying(16) NOT NULL
+);
+
+
+ALTER TABLE public.forum_markedtag OWNER TO gono63;
+
+--
+-- Name: forum_markedtag_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_markedtag_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_markedtag_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_markedtag_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_markedtag_id_seq OWNED BY forum_markedtag.id;
+
+
+--
+-- Name: forum_markedtag_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_markedtag_id_seq', 1, false);
+
+
+--
+-- Name: forum_node; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_node (
+    id integer NOT NULL,
+    title character varying(300) NOT NULL,
+    tagnames character varying(125) NOT NULL,
+    author_id integer NOT NULL,
+    body text NOT NULL,
+    node_type character varying(16) NOT NULL,
+    parent_id integer,
+    abs_parent_id integer,
+    added_at timestamp with time zone NOT NULL,
+    score integer NOT NULL,
+    state_string text NOT NULL,
+    last_edited_id integer,
+    last_activity_by_id integer,
+    last_activity_at timestamp with time zone,
+    active_revision_id integer,
+    extra text,
+    extra_ref_id integer,
+    extra_count integer NOT NULL,
+    marked boolean NOT NULL
+);
+
+
+ALTER TABLE public.forum_node OWNER TO gono63;
+
+--
+-- Name: forum_node_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_node_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_node_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_node_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_node_id_seq OWNED BY forum_node.id;
+
+
+--
+-- Name: forum_node_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_node_id_seq', 5, true);
+
+
+--
+-- Name: forum_node_tags; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_node_tags (
+    id integer NOT NULL,
+    node_id integer NOT NULL,
+    tag_id integer NOT NULL
+);
+
+
+ALTER TABLE public.forum_node_tags OWNER TO gono63;
+
+--
+-- Name: forum_node_tags_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_node_tags_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_node_tags_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_node_tags_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_node_tags_id_seq OWNED BY forum_node_tags.id;
+
+
+--
+-- Name: forum_node_tags_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_node_tags_id_seq', 3, true);
+
+
+--
+-- Name: forum_noderevision; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_noderevision (
+    id integer NOT NULL,
+    title character varying(300) NOT NULL,
+    tagnames character varying(125) NOT NULL,
+    author_id integer NOT NULL,
+    body text NOT NULL,
+    node_id integer NOT NULL,
+    summary character varying(300) NOT NULL,
+    revision integer NOT NULL,
+    revised_at timestamp with time zone NOT NULL,
+    CONSTRAINT forum_noderevision_revision_check CHECK ((revision >= 0))
+);
+
+
+ALTER TABLE public.forum_noderevision OWNER TO gono63;
+
+--
+-- Name: forum_noderevision_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_noderevision_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_noderevision_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_noderevision_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_noderevision_id_seq OWNED BY forum_noderevision.id;
+
+
+--
+-- Name: forum_noderevision_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_noderevision_id_seq', 5, true);
+
+
+--
+-- Name: forum_nodestate; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_nodestate (
+    id integer NOT NULL,
+    node_id integer NOT NULL,
+    state_type character varying(16) NOT NULL,
+    action_id integer NOT NULL
+);
+
+
+ALTER TABLE public.forum_nodestate OWNER TO gono63;
+
+--
+-- Name: forum_nodestate_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_nodestate_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_nodestate_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_nodestate_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_nodestate_id_seq OWNED BY forum_nodestate.id;
+
+
+--
+-- Name: forum_nodestate_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_nodestate_id_seq', 2, true);
+
+
+--
+-- Name: forum_openidassociation; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_openidassociation (
+    id integer NOT NULL,
+    server_url text NOT NULL,
+    handle character varying(255) NOT NULL,
+    secret text NOT NULL,
+    issued integer NOT NULL,
+    lifetime integer NOT NULL,
+    assoc_type text NOT NULL
+);
+
+
+ALTER TABLE public.forum_openidassociation OWNER TO gono63;
+
+--
+-- Name: forum_openidassociation_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_openidassociation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_openidassociation_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_openidassociation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_openidassociation_id_seq OWNED BY forum_openidassociation.id;
+
+
+--
+-- Name: forum_openidassociation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_openidassociation_id_seq', 1, false);
+
+
+--
+-- Name: forum_openidnonce; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_openidnonce (
+    id integer NOT NULL,
+    server_url character varying(200) NOT NULL,
+    "timestamp" integer NOT NULL,
+    salt character varying(50) NOT NULL
+);
+
+
+ALTER TABLE public.forum_openidnonce OWNER TO gono63;
+
+--
+-- Name: forum_openidnonce_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_openidnonce_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_openidnonce_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_openidnonce_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_openidnonce_id_seq OWNED BY forum_openidnonce.id;
+
+
+--
+-- Name: forum_openidnonce_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_openidnonce_id_seq', 1, false);
+
+
+--
+-- Name: forum_questionsubscription; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_questionsubscription (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    question_id integer NOT NULL,
+    auto_subscription boolean NOT NULL,
+    last_view timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.forum_questionsubscription OWNER TO gono63;
+
+--
+-- Name: forum_questionsubscription_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_questionsubscription_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_questionsubscription_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_questionsubscription_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_questionsubscription_id_seq OWNED BY forum_questionsubscription.id;
+
+
+--
+-- Name: forum_questionsubscription_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_questionsubscription_id_seq', 2, true);
+
+
+--
+-- Name: forum_rootnode_doc; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_rootnode_doc (
+    node_id integer NOT NULL,
+    document tsvector
+);
+
+
+ALTER TABLE public.forum_rootnode_doc OWNER TO gono63;
+
+--
+-- Name: forum_subscriptionsettings; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_subscriptionsettings (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    enable_notifications boolean NOT NULL,
+    member_joins character varying(1) NOT NULL,
+    new_question character varying(1) NOT NULL,
+    new_question_watched_tags character varying(1) NOT NULL,
+    subscribed_questions character varying(1) NOT NULL,
+    all_questions boolean NOT NULL,
+    all_questions_watched_tags boolean NOT NULL,
+    questions_viewed boolean NOT NULL,
+    notify_answers boolean NOT NULL,
+    notify_reply_to_comments boolean NOT NULL,
+    notify_comments_own_post boolean NOT NULL,
+    notify_comments boolean NOT NULL,
+    notify_accepted boolean NOT NULL,
+    send_digest boolean NOT NULL
+);
+
+
+ALTER TABLE public.forum_subscriptionsettings OWNER TO gono63;
+
+--
+-- Name: forum_subscriptionsettings_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_subscriptionsettings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_subscriptionsettings_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_subscriptionsettings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_subscriptionsettings_id_seq OWNED BY forum_subscriptionsettings.id;
+
+
+--
+-- Name: forum_subscriptionsettings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_subscriptionsettings_id_seq', 2, true);
+
+
+--
+-- Name: forum_tag; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_tag (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    created_by_id integer NOT NULL,
+    created_at timestamp with time zone,
+    used_count integer NOT NULL,
+    CONSTRAINT forum_tag_used_count_check CHECK ((used_count >= 0))
+);
+
+
+ALTER TABLE public.forum_tag OWNER TO gono63;
+
+--
+-- Name: forum_tag_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_tag_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_tag_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_tag_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_tag_id_seq OWNED BY forum_tag.id;
+
+
+--
+-- Name: forum_tag_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_tag_id_seq', 3, true);
+
+
+--
+-- Name: forum_user; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_user (
+    user_ptr_id integer NOT NULL,
+    is_approved boolean NOT NULL,
+    email_isvalid boolean NOT NULL,
+    reputation integer NOT NULL,
+    gold integer NOT NULL,
+    silver integer NOT NULL,
+    bronze integer NOT NULL,
+    last_seen timestamp with time zone NOT NULL,
+    real_name character varying(100) NOT NULL,
+    website character varying(200) NOT NULL,
+    location character varying(100) NOT NULL,
+    date_of_birth date,
+    about text NOT NULL,
+    CONSTRAINT forum_user_bronze_check CHECK ((bronze >= 0)),
+    CONSTRAINT forum_user_gold_check CHECK ((gold >= 0)),
+    CONSTRAINT forum_user_silver_check CHECK ((silver >= 0))
+);
+
+
+ALTER TABLE public.forum_user OWNER TO gono63;
+
+--
+-- Name: forum_userproperty; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_userproperty (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    key character varying(16) NOT NULL,
+    value text
+);
+
+
+ALTER TABLE public.forum_userproperty OWNER TO gono63;
+
+--
+-- Name: forum_userproperty_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_userproperty_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_userproperty_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_userproperty_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_userproperty_id_seq OWNED BY forum_userproperty.id;
+
+
+--
+-- Name: forum_userproperty_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_userproperty_id_seq', 2, true);
+
+
+--
+-- Name: forum_validationhash; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_validationhash (
+    id integer NOT NULL,
+    hash_code character varying(255) NOT NULL,
+    seed character varying(12) NOT NULL,
+    expiration timestamp with time zone NOT NULL,
+    type character varying(12) NOT NULL,
+    user_id integer NOT NULL
+);
+
+
+ALTER TABLE public.forum_validationhash OWNER TO gono63;
+
+--
+-- Name: forum_validationhash_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_validationhash_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_validationhash_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_validationhash_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_validationhash_id_seq OWNED BY forum_validationhash.id;
+
+
+--
+-- Name: forum_validationhash_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_validationhash_id_seq', 2, true);
+
+
+--
+-- Name: forum_vote; Type: TABLE; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE TABLE forum_vote (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    node_id integer NOT NULL,
+    value smallint NOT NULL,
+    action_id integer NOT NULL,
+    voted_at timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.forum_vote OWNER TO gono63;
+
+--
+-- Name: forum_vote_id_seq; Type: SEQUENCE; Schema: public; Owner: gono63
+--
+
+CREATE SEQUENCE forum_vote_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.forum_vote_id_seq OWNER TO gono63;
+
+--
+-- Name: forum_vote_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: gono63
+--
+
+ALTER SEQUENCE forum_vote_id_seq OWNED BY forum_vote.id;
+
+
+--
+-- Name: forum_vote_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gono63
+--
+
+SELECT pg_catalog.setval('forum_vote_id_seq', 1, false);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_group ALTER COLUMN id SET DEFAULT nextval('auth_group_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_group_permissions ALTER COLUMN id SET DEFAULT nextval('auth_group_permissions_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_message ALTER COLUMN id SET DEFAULT nextval('auth_message_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_permission ALTER COLUMN id SET DEFAULT nextval('auth_permission_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user ALTER COLUMN id SET DEFAULT nextval('auth_user_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_groups ALTER COLUMN id SET DEFAULT nextval('auth_user_groups_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_user_permissions ALTER COLUMN id SET DEFAULT nextval('auth_user_user_permissions_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY django_admin_log ALTER COLUMN id SET DEFAULT nextval('django_admin_log_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY django_content_type ALTER COLUMN id SET DEFAULT nextval('django_content_type_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY django_site ALTER COLUMN id SET DEFAULT nextval('django_site_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_action ALTER COLUMN id SET DEFAULT nextval('forum_action_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_actionrepute ALTER COLUMN id SET DEFAULT nextval('forum_actionrepute_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_authkeyuserassociation ALTER COLUMN id SET DEFAULT nextval('forum_authkeyuserassociation_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award ALTER COLUMN id SET DEFAULT nextval('forum_award_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_badge ALTER COLUMN id SET DEFAULT nextval('forum_badge_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_flag ALTER COLUMN id SET DEFAULT nextval('forum_flag_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_keyvalue ALTER COLUMN id SET DEFAULT nextval('forum_keyvalue_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_markedtag ALTER COLUMN id SET DEFAULT nextval('forum_markedtag_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node ALTER COLUMN id SET DEFAULT nextval('forum_node_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node_tags ALTER COLUMN id SET DEFAULT nextval('forum_node_tags_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_noderevision ALTER COLUMN id SET DEFAULT nextval('forum_noderevision_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_nodestate ALTER COLUMN id SET DEFAULT nextval('forum_nodestate_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_openidassociation ALTER COLUMN id SET DEFAULT nextval('forum_openidassociation_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_openidnonce ALTER COLUMN id SET DEFAULT nextval('forum_openidnonce_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_questionsubscription ALTER COLUMN id SET DEFAULT nextval('forum_questionsubscription_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_subscriptionsettings ALTER COLUMN id SET DEFAULT nextval('forum_subscriptionsettings_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_tag ALTER COLUMN id SET DEFAULT nextval('forum_tag_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_userproperty ALTER COLUMN id SET DEFAULT nextval('forum_userproperty_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_validationhash ALTER COLUMN id SET DEFAULT nextval('forum_validationhash_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_vote ALTER COLUMN id SET DEFAULT nextval('forum_vote_id_seq'::regclass);
+
+
+--
+-- Data for Name: auth_group; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_group (id, name) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_group_permissions; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_group_permissions (id, group_id, permission_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_message; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_message (id, user_id, message) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_permission; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_permission (id, name, content_type_id, codename) FROM stdin;
+1	Can add permission	1	add_permission
+2	Can change permission	1	change_permission
+3	Can delete permission	1	delete_permission
+4	Can add group	2	add_group
+5	Can change group	2	change_group
+6	Can delete group	2	delete_group
+7	Can add user	3	add_user
+8	Can change user	3	change_user
+9	Can delete user	3	delete_user
+10	Can add message	4	add_message
+11	Can change message	4	change_message
+12	Can delete message	4	delete_message
+13	Can add content type	5	add_contenttype
+14	Can change content type	5	change_contenttype
+15	Can delete content type	5	delete_contenttype
+16	Can add session	6	add_session
+17	Can change session	6	change_session
+18	Can delete session	6	delete_session
+19	Can add site	7	add_site
+20	Can change site	7	change_site
+21	Can delete site	7	delete_site
+22	Can add log entry	8	add_logentry
+23	Can change log entry	8	change_logentry
+24	Can delete log entry	8	delete_logentry
+25	Can add key value	9	add_keyvalue
+26	Can change key value	9	change_keyvalue
+27	Can delete key value	9	delete_keyvalue
+28	Can add user	10	add_user
+29	Can change user	10	change_user
+30	Can delete user	10	delete_user
+31	Can add user property	11	add_userproperty
+32	Can change user property	11	change_userproperty
+33	Can delete user property	11	delete_userproperty
+34	Can add subscription settings	12	add_subscriptionsettings
+35	Can change subscription settings	12	change_subscriptionsettings
+36	Can delete subscription settings	12	delete_subscriptionsettings
+37	Can add validation hash	13	add_validationhash
+38	Can change validation hash	13	change_validationhash
+39	Can delete validation hash	13	delete_validationhash
+40	Can add auth key user association	14	add_authkeyuserassociation
+41	Can change auth key user association	14	change_authkeyuserassociation
+42	Can delete auth key user association	14	delete_authkeyuserassociation
+43	Can add tag	15	add_tag
+44	Can change tag	15	change_tag
+45	Can delete tag	15	delete_tag
+46	Can add marked tag	16	add_markedtag
+47	Can change marked tag	16	change_markedtag
+48	Can delete marked tag	16	delete_markedtag
+49	Can add node	17	add_node
+50	Can change node	17	change_node
+51	Can delete node	17	delete_node
+52	Can add node revision	18	add_noderevision
+53	Can change node revision	18	change_noderevision
+54	Can delete node revision	18	delete_noderevision
+55	Can add node state	19	add_nodestate
+56	Can change node state	19	change_nodestate
+57	Can delete node state	19	delete_nodestate
+58	Can add action	20	add_action
+59	Can change action	20	change_action
+60	Can delete action	20	delete_action
+61	Can add action repute	21	add_actionrepute
+62	Can change action repute	21	change_actionrepute
+63	Can delete action repute	21	delete_actionrepute
+64	Can add question	17	add_question
+65	Can change question	17	change_question
+66	Can delete question	17	delete_question
+67	Can add question subscription	22	add_questionsubscription
+68	Can change question subscription	22	change_questionsubscription
+69	Can delete question subscription	22	delete_questionsubscription
+70	Can add answer	17	add_answer
+71	Can change answer	17	change_answer
+72	Can delete answer	17	delete_answer
+73	Can add comment	17	add_comment
+74	Can change comment	17	change_comment
+75	Can delete comment	17	delete_comment
+76	Can add vote	23	add_vote
+77	Can change vote	23	change_vote
+78	Can delete vote	23	delete_vote
+79	Can add flag	24	add_flag
+80	Can change flag	24	change_flag
+81	Can delete flag	24	delete_flag
+82	Can add badge	25	add_badge
+83	Can change badge	25	change_badge
+84	Can delete badge	25	delete_badge
+85	Can add award	26	add_award
+86	Can change award	26	change_award
+87	Can delete award	26	delete_award
+88	Can add page	17	add_page
+89	Can change page	17	change_page
+90	Can delete page	17	delete_page
+91	Can add open id nonce	27	add_openidnonce
+92	Can change open id nonce	27	change_openidnonce
+93	Can delete open id nonce	27	delete_openidnonce
+94	Can add open id association	28	add_openidassociation
+95	Can change open id association	28	change_openidassociation
+96	Can delete open id association	28	delete_openidassociation
+\.
+
+
+--
+-- Data for Name: auth_user; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_user (id, username, first_name, last_name, email, password, is_staff, is_active, is_superuser, last_login, date_joined) FROM stdin;
+2	Sosso333			sosso333@hotmail.com	sha1$34d8c$c0dac3e97a6fb4dc862fb994880e412c59eba4b5	f	t	f	2012-11-08 12:53:34.304582+01	2012-11-08 12:53:33.852244+01
+1	gono63			gono63@gmail.com	sha1$e8b8c$9d66a3196d66b6106f20d74b4d9df9fc759a7c0c	t	t	t	2012-11-08 12:54:38.110772+01	2012-10-28 21:59:08.222828+01
+\.
+
+
+--
+-- Data for Name: auth_user_groups; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_user_groups (id, user_id, group_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_user_user_permissions; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY auth_user_user_permissions (id, user_id, permission_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: django_admin_log; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY django_admin_log (id, action_time, user_id, content_type_id, object_id, object_repr, action_flag, change_message) FROM stdin;
+\.
+
+
+--
+-- Data for Name: django_content_type; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY django_content_type (id, name, app_label, model) FROM stdin;
+1	permission	auth	permission
+2	group	auth	group
+3	user	auth	user
+4	message	auth	message
+5	content type	contenttypes	contenttype
+6	session	sessions	session
+7	site	sites	site
+8	log entry	admin	logentry
+9	key value	forum	keyvalue
+10	user	forum	user
+11	user property	forum	userproperty
+12	subscription settings	forum	subscriptionsettings
+13	validation hash	forum	validationhash
+14	auth key user association	forum	authkeyuserassociation
+15	tag	forum	tag
+16	marked tag	forum	markedtag
+17	node	forum	node
+18	node revision	forum	noderevision
+19	node state	forum	nodestate
+20	action	forum	action
+21	action repute	forum	actionrepute
+22	question subscription	forum	questionsubscription
+23	vote	forum	vote
+24	flag	forum	flag
+25	badge	forum	badge
+26	award	forum	award
+27	open id nonce	forum	openidnonce
+28	open id association	forum	openidassociation
+29	question	forum	question
+30	answer	forum	answer
+31	comment	forum	comment
+32	page	forum	page
+\.
+
+
+--
+-- Data for Name: django_session; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY django_session (session_key, session_data, expire_date) FROM stdin;
+393efe2d96699e724960ed0e8349a9cb	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-23 15:41:30.528722+01
+cd7afe79016b618891b824889f3d5a84	ZjZkZDA4Y2EzZTUwYTA0Yzg2NDY3N2QzMTZhMWRkOWY2YTIyOWEzOTqAAn1xAShVDV9hdXRoX3Vz\nZXJfaWRLAVUTcHJldmlld2luZ19zZXR0aW5nc31VE2ZvcmNlX2VtYWlsX3JlcXVlc3SIVRVsYXN0\nX3NlZW5faW5fcXVlc3Rpb259cQIoSwFjZGF0ZXRpbWUKZGF0ZXRpbWUKcQNVCgfcCwkMDC0ONiaF\nUnEESwNoA1UKB9wLCQk3Cg5fooVScQV1VRhwYWdpbmF0b3JfUVVFU1RJT05TX0xJU1R9VRJfYXV0\naF91c2VyX2JhY2tlbmRVKWRqYW5nby5jb250cmliLmF1dGguYmFja2VuZHMuTW9kZWxCYWNrZW5k\nVQ1vbl9zaWduaW5fdXJsVRZodHRwOi8vbG9jYWxob3N0OjgwNzAvVQxncmVldGluZ19zZXSIdS4=\n	2012-11-23 18:12:46.859902+01
+d02c90f78230c47e2ffd35da19ded2d4	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-14 15:34:15.116912+01
+19ff0e48b6d530dc3ab63a8a3a0e9abb	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-15 19:51:09.334589+01
+e6084890e809f178f1ec97fbfe1d3353	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-19 13:25:14.42238+01
+d1671368d529baf8abefac8b252f2336	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-19 16:54:29.790949+01
+643b272df6a324c89bef48afa02bf5c7	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-20 18:35:57.720983+01
+b58ddf74addc22d2475bffd3a5bd6ad6	MDk1MjAwMzExNzY5MTkwYTEyYWU3MjllMGEzOGQwOWJlYWEzN2FmMDqAAn1xAShVGHBhZ2luYXRv\ncl9RVUVTVElPTlNfTElTVH1VDGdyZWV0aW5nX3NldHECiHUu\n	2012-11-21 18:43:26.661388+01
+\.
+
+
+--
+-- Data for Name: django_site; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY django_site (id, domain, name) FROM stdin;
+1	example.com	example.com
+\.
+
+
+--
+-- Data for Name: forum_action; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_action (id, user_id, real_user_id, ip, node_id, action_type, action_date, extra, canceled, canceled_by_id, canceled_at, canceled_ip) FROM stdin;
+1	1	\N	127.0.0.1	\N	userjoins	2012-10-28 21:59:08.259052+01	\N	f	\N	\N	
+2	1	\N	127.0.0.1	\N	userlogin	2012-10-28 21:59:08.542963+01	\N	f	\N	\N	
+3	1	\N	127.0.0.1	1	ask	2012-10-28 23:03:27.19917+01	\N	f	\N	\N	
+4	1	\N	127.0.0.1	2	answer	2012-10-28 23:04:08.893344+01	\N	f	\N	\N	
+6	1	\N	127.0.0.1	3	ask	2012-11-01 18:52:06.705608+01	\N	f	\N	\N	
+7	2	\N	127.0.0.1	\N	userjoins	2012-11-08 12:53:33.97438+01	\N	f	\N	\N	
+8	2	\N	127.0.0.1	\N	userlogin	2012-11-08 12:53:34.354011+01	\N	f	\N	\N	
+9	1	\N	127.0.0.1	\N	userlogin	2012-11-08 12:54:38.165688+01	\N	f	\N	\N	
+10	1	\N	127.0.0.1	1	favorite	2012-11-08 13:11:33.55539+01	\N	t	1	2012-11-08 13:11:37.721034+01	127.0.0.1
+5	1	\N	127.0.0.1	2	acceptanswer	2012-10-28 23:04:16.551643+01	\N	t	1	2012-11-08 13:11:42.693671+01	127.0.0.1
+11	1	\N	127.0.0.1	2	acceptanswer	2012-11-08 13:11:44.461758+01	\N	f	\N	\N	
+12	1	\N		\N	award	2012-11-08 13:11:44.690506+01	\N	f	\N	\N	
+13	1	\N	127.0.0.1	4	comment	2012-11-09 15:43:20.975004+01	\N	f	\N	\N	
+14	1	\N	127.0.0.1	4	commenttoanswer	2012-11-09 15:55:10.613285+01	\N	f	\N	\N	
+15	1	\N	127.0.0.1	5	comment	2012-11-09 16:28:34.087871+01	\N	f	\N	\N	
+\.
+
+
+--
+-- Data for Name: forum_actionrepute; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_actionrepute (id, action_id, date, user_id, value, by_canceled) FROM stdin;
+1	1	2012-10-28 21:59:08.309192+01	1	1	f
+2	7	2012-11-08 12:53:34.093897+01	2	1	f
+\.
+
+
+--
+-- Data for Name: forum_authkeyuserassociation; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_authkeyuserassociation (id, key, provider, user_id, added_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: forum_award; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_award (id, user_id, badge_id, node_id, awarded_at, trigger_id, action_id) FROM stdin;
+1	1	19	\N	2012-11-08 13:11:44.73652+01	11	12
+\.
+
+
+--
+-- Data for Name: forum_badge; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_badge (id, type, cls, awarded_count) FROM stdin;
+1	3	PopularQuestion	0
+2	2	NotableQuestion	0
+3	1	FamousQuestion	0
+4	3	NiceQuestion	0
+5	2	GoodQuestion	0
+6	1	GreatQuestion	0
+7	3	NiceAnswer	0
+8	2	GoodAnswer	0
+9	1	GreatAnswer	0
+10	2	FavoriteQuestion	0
+11	1	StellarQuestion	0
+12	3	Disciplined	0
+13	3	PeerPressure	0
+14	3	Critic	0
+15	3	Supporter	0
+16	3	CitizenPatrol	0
+17	3	Organizer	0
+18	3	Editor	0
+20	3	Cleanup	0
+21	3	Autobiographer	0
+22	2	CivicDuty	0
+23	3	Pundit	0
+24	3	SelfLearner	0
+25	2	StrunkAndWhite	0
+26	3	Student	0
+27	3	Teacher	0
+28	2	Enlightened	0
+29	2	Guru	0
+30	2	Necromancer	0
+31	2	Taxonomist	0
+32	3	ValidatedEmail	0
+19	3	Scholar	1
+\.
+
+
+--
+-- Data for Name: forum_flag; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_flag (id, user_id, node_id, reason, action_id, flagged_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: forum_keyvalue; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_keyvalue (id, key, value) FROM stdin;
+1	FORM_EMPTY_QUESTION_BODY	eJzzNDDg0gMAAwQA4g==
+2	FORM_MIN_NUMBER_OF_TAGS	T[int]1
+3	FORM_MAX_NUMBER_OF_TAGS	T[int]5
+4	MIN_USERNAME_LENGTH	T[int]3
+5	DISCIPLINED_MIN_SCORE	T[int]3
+6	PEER_PRESSURE_MAX_SCORE	T[int]-3
+7	CIVIC_DUTY_VOTES	T[int]300
+8	PUNDIT_COMMENT_COUNT	T[int]10
+9	SELF_LEARNER_UP_VOTES	T[int]3
+10	STRUNK_AND_WHITE_EDITS	T[int]100
+11	ENLIGHTENED_UP_VOTES	T[int]10
+12	GURU_UP_VOTES	T[int]40
+13	NECROMANCER_DIF_DAYS	T[int]60
+14	NECROMANCER_UP_VOTES	T[int]5
+15	TAXONOMIST_USE_COUNT	T[int]50
+16	PG_FTSTRIGGERS_VERSION	T[int]11
+17	INCLUDE_ID_IN_USER_URLS	eJzzNDDk0gMAAwcA4w==
+18	STORE_GREETING_IN_COOKIE	eJzzNDDk0gMAAwcA4w==
+19	MAINTAINANCE_MODE	\N
+20	SHOW_SUMMARY_ON_QUESTIONS_LIST	eJzzNDDg0gMAAwQA4g==
+22	APP_KEYWORDS	T[unicode]OSQA,CNPROG,forum,community
+23	GOOGLE_SITEMAP_CODE	T[str]
+25	USE_CUSTOM_CSS	eJzzNDDg0gMAAwQA4g==
+26	USE_CUSTOM_HEAD	eJzzNDDg0gMAAwQA4g==
+27	APP_SHORT_NAME	T[str]OSQA
+28	USE_CUSTOM_HEADER	eJzzNDDg0gMAAwQA4g==
+32	APP_INTRO	T[unicode]<p>Ask and answer questions, make the world better!</p>
+35	SIDEBAR_UPPER_DONT_WRAP	eJzzNDDg0gMAAwQA4g==
+39	SIDEBAR_LOWER_DONT_WRAP	eJzzNDDg0gMAAwQA4g==
+41	RECENT_TAGS_SIZE	T[int]25
+42	RECENT_AWARD_SIZE	T[int]15
+43	USE_CUSTOM_FOOTER	eJzzNDDg0gMAAwQA4g==
+44	SUPPORT_URL	T[str]
+45	CONTACT_URL	T[str]
+46	GOOGLE_ANALYTICS_KEY	T[str]
+50	RESERVED_USERNAMES	eJwVzUsSwkAIBNA9J8kqJUnUeJHZUwE/5cxIZRLN8W12jwaqu+xM6b4vb/KBJLXnayMfIWmNfIrIDvJzJKrkF8A0jq6xk6+Rz5Batg2+wUWqPGA+YdhdJRbMGFYrn/jg6Kr2g9DV/wHexCkV
+51	EMAIL_UNIQUE	eJzzNDDk0gMAAwcA4w==
+52	ALLOW_NEGATIVE_REPUTATION	eJzzNDDk0gMAAwcA4w==
+53	INITIAL_REP	T[int]1
+54	EMAIL_SUBJECT_PREFIX	T[str]
+55	EMAIL_PARAGRAPH_STYLE	eJw1jDEOwjAMAPe+IipDl6QiggG5H2DnBVblNJZcJ0pSRHk9FYjb7oZ79HOSVOB0+TKFpM0FXFl2GCLJkxrPaJQ2GqzBwijW3P/dmopaXaXCYRJWcpF4iQ38Lb9+r8pvAn89dMWysLqWMvjz4X2XfTd+ACjNK70=
+56	EMAIL_ANCHOR_STYLE	T[str]text-decoration:none;color:#3060a8;font-weight:bold;
+57	EMAIL_BORDER_COLOR	T[str]#e5ebf8
+58	EMAIL_FOOTER_TEXT	T[str]
+59	EMAIL_HOST	T[str]
+60	DONT_NOTIFY_UNVALIDATED	eJzzNDDk0gMAAwcA4w==
+61	ALLOW_UNICODE_IN_SLUGS	eJzzNDDg0gMAAwQA4g==
+62	EMAIL_HOST_USER	T[str]
+63	EMAIL_HOST_PASSWORD	T[str]
+64	ONLINE_USERS	eJzTSNEDAAFxALs=
+65	GRAVATAR_DEFAULT_IMAGE	T[str]identicon
+66	GRAVATAR_ALLOWED_RATING	T[str]g
+67	TRUNCATE_USERNAMES_LONGER_THAN	T[int]15
+68	SHOW_STATUS_DIAMONDS	eJzzNDDk0gMAAwcA4w==
+69	SETTINGS_PACK	T[str]default
+70	DJSTYLE_ADMIN_INTERFACE	eJzzNDDk0gMAAwcA4w==
+71	APP_COPYRIGHT	T[unicode]Copyright OSQA, 2010. Some rights reserved under creative commons license.
+72	UPFILES_FOLDER	T[str]/home/gono63/osqa/forum/upfiles
+73	UPFILES_ALIAS	T[str]/upfiles/
+29	APP_LOGO	T[str]/upfiles/netelaisse.png
+21	APP_TITLE	T[unicode]ne te laisse point faire !!!
+24	APP_FAVICON	T[str]/upfiles/chraz.png
+75	USER_REPUTATION_TO_MAX_VOTES	eJzzNDDk0gMAAwcA4w==
+76	MAX_VOTES_PER_DAY	T[int]30
+77	ALLOW_MAX_FILE_SIZE	eJxzM9Iz5dIDAAQ9ARQ=
+78	FAMOUS_QUESTION_VIEWS	T[int]10000
+79	FAVORITE_QUESTION_FAVS	T[int]25
+80	GOOD_ANSWER_VOTES_UP	T[int]25
+81	GOOD_QUESTION_VOTES_UP	T[int]25
+82	GREAT_ANSWER_VOTES_UP	T[int]100
+83	GREAT_QUESTION_VOTES_UP	T[int]100
+84	NICE_ANSWER_VOTES_UP	T[int]10
+85	NICE_QUESTION_VOTES_UP	T[int]10
+86	NOTABLE_QUESTION_VIEWS	T[int]2500
+87	POPULAR_QUESTION_VIEWS	T[int]1000
+88	STELLAR_QUESTION_FAVS	T[int]100
+48	UPDATE_MESSAGES_XML	T[str]<?xml version="1.0" encoding="UTF-8" ?>\n<messages>\n</messages>
+31	SHOW_WELCOME_BOX	eJzzNDDg0gMAAwQA4g==
+74	SHOW_INTERESTING_TAGS_BOX	eJzzNDDg0gMAAwQA4g==
+37	SIDEBAR_LOWER_RENDER_MODE	T[str]html
+33	SIDEBAR_UPPER_RENDER_MODE	T[str]html
+40	SIDEBAR_LOWER_SHOW	eJzzNDDg0gMAAwQA4g==
+49	APP_DESCRIPTION	eJwljUEKw0AIRfc5hbtuSqCX6BG6N4mlwoxOHA09bpY9QA9Q04DI//L8/3FXiwo7NA2DKRwWgkbWAxcyKAQV31wTyXtVyZ0zv5Q7G4ScsMohSvjXYY1LCJhO6lfAJ8vxUIJhVulkW6YmD1RbUQY6CzU2zbxEnCUS2VPXGsLr4UjcCF44saN4/ydiFqJ8nMah3YbxB7nZSvo=
+38	SIDEBAR_LOWER_TEXT	eJwLs8kwskvKLy3JLCxNVUjNU8jJTM9LtdEHivLGlBoYGCRCKZvM3HSF4qJkWyX90oK0zJzUYv0Q3eKMzKISvayCdCWFxJwSW6WS1FQFsJgSYd25qSnx7v4+bnpeAe7o2hVSivJzUok0xDUoyDU0CKsxaaV5SnZcBYZcegAcj0oZ
+30	USE_ANNOUNCEMENT_BAR	eJzzNDDg0gMAAwQA4g==
+47	LATEST_UPDATES_DATETIME	eJxLTkksSS3JzE3lgjMKDLk0gtVjKgzMYypSkoF0UkxJTIlmTIWhGUTQ0hRIW6hzlQQVGHHpAQDynxUp
+36	SIDEBAR_UPPER_SHOW	eJzzNDDg0gMAAwQA4g==
+89	ABOUT_PAGE_TEXT	eJxdUz1v2zAQ3QP0PxyyeDEC9ycEGboVnTplOUsX6wqRVO5II+mv9RjtWbr1neSqTReJEql370vf75M62ezqlXP1PR1L/lGa7enTYzscDny9PQi5ViHJ1JXs1VpXtWQSr9TjonmmC02mZx3nk4rRKE5DS6zZaWIj42kqVonbC3Ws7tjnVkviqs9N/Droue3otuRbqpIxrxdKUqthPFjloi4JG5g1SjOaRu5kH6yeAAkFsXSMEQKQjvRKrBXHmlO/47qAXif1co4PgufCR98MS1Chf3YSd4NmgTH8pDno5AKsCReHyJ6hLpg4HY099kHJF0V3Hx38WkLFsdWrZzSJeQOLsApzXjS1tOgtuV+EdwPkqlHL6+GSYzG2+l5DXctk5VjqFtUfhmPTJSSxM8A9UkrTWJRknVvauQAWRxBbw5EL1im1HKwNDgbRgY+6VGJB5JCV36rc/d+LQQw8w4XdmjZCJW/gmxg78z6ep5lPi6RxF5FbaRWpXQL3W/Ft/YVNNjUgi9pUHKXyi5aqOb/KFgECB83OStxWO+qaQKfWNQVzTShkmn39wCT3xnATjdJxqU9YpJ3Q3+598JrP0gFaYzpcM4suzd3A+QSfYNYYxUVg8eNsGIqWxb8g1oPZAlj0lOe1zHC8Rp0CFltggBig1OkM+KXb8SVwN6vv6ah4/163Nw+D8c/r+mb6fHP3G9f7X5I=
+91	LIMIT_TAG_CREATION	eJzzNDDg0gMAAwQA4g==
+92	FORM_MIN_QUESTION_TITLE	T[int]10
+93	FORM_MIN_QUESTION_BODY	T[int]10
+94	FORM_MIN_LENGTH_OF_TAG	T[int]1
+95	FORM_MAX_LENGTH_OF_TAG	T[int]20
+96	FORM_MIN_COMMENT_BODY	T[int]10
+97	FORM_MAX_COMMENT_BODY	T[int]600
+99	FORM_GRAVATAR_IN_COMMENTS	eJzzNDDg0gMAAwQA4g==
+90	WIKI_ON	eJzzNDDg0gMAAwQA4g==
+98	FORM_ALLOW_MARKDOWN_IN_COMMENTS	eJzzNDDg0gMAAwQA4g==
+101	CUSTOM_HEADER	T[str]
+102	CUSTOM_HEADER_RENDER_MODE	T[str]markdown
+105	CUSTOM_FOOTER	T[str]
+106	CUSTOM_FOOTER_RENDER_MODE	T[str]markdown
+107	CUSTOM_FOOTER_MODE	T[str]replace
+108	EMBED_YOUTUBE_VIDEOS	eJzzNDDk0gMAAwcA4w==
+109	SHOW_LATEST_COMMENTS_FIRST	eJzzNDDg0gMAAwQA4g==
+110	SUMMARY_LENGTH	T[int]300
+111	SHOW_TAGS_IN_A_CLOUD	eJzzNDDk0gMAAwcA4w==
+112	TAGS_CLOUD_MIN_OCCURS	T[int]1
+113	TAGS_CLOUD_MAX_OCCURS	T[int]35
+114	TAGS_CLOUD_MIN_FONT_SIZE	T[int]10
+115	TAGS_CLOUD_MAX_FONT_SIZE	T[int]25
+116	UPDATE_LATEST_ACTIVITY_ON_TAG_EDIT	eJzzNDDk0gMAAwcA4w==
+117	LIMIT_RELATED_TAGS	T[int]0
+118	CUSTOM_HEAD	T[str]
+119	CUSTOM_CSS	T[str]
+120	CAPTCHA_IF_REP_LESS_THAN	T[int]0
+121	REQUIRE_EMAIL_VALIDATION_TO	eJzTyNEDAAGBAMM=
+124	WORDPRESS_API_KEY	T[str]
+125	FORCE_SINGLE_URL	eJzzNDDk0gMAAwcA4w==
+126	DISABLE_ACCEPTING_FEATURE	eJzzNDDg0gMAAwQA4g==
+127	SHOW_USER_ACCEPT_RATE	eJzzNDDk0gMAAwcA4w==
+128	FREEZE_ACCEPT_RATE_FOR	eJzTyCkw5ApWT0zJzcxT5yow4krUAwA1zAUv
+129	CANNED_COMMENTS	eJxFjTsOwkAMRPucYrpQoJXgDhQ0fBQQtZU4WUurrON1QNyeTUU782beLumh6doXw3hZxRiUEjQXl3kq8IxI7xqiT0y2R1HuZZQe9+epe5yvF8gMjwwXT4xROA0BtwoXBg/itZQCkyk66EPf7dJYo23Af0ilOtSysmFZuerzHNpGjw2FHzyJOK8=
+130	USE_CANNED_COMMENTS	eJzzNDDk0gMAAwcA4w==
+131	MAXIMUM_ACCEPTED_ANSWERS	T[int]1
+132	MAXIMUM_ACCEPTED_PER_USER	T[int]1
+123	QUESTION_TAG_TIPS	eJxdjj0KwkAQhXvBO7zORiUeIYKKYBT8w0IIi5liJNk1Ozupcti03sIV1IDVMI/3fbwzJtiQoHJBJrfyKRDyDdmADmwLrpU8CkKtjhG84UAoTXxJAjs7vGqSJCZK1qXAcPEmy+gzGnw8XWScNtHRuBj8uGkPnmwf40EaYBrHHneVWkcd2uVun+VZesm3p2y+2Oe7ZX5MV4e23zxGZVhQOA4g++GNxgJb+QrW23/Bd8TgMRtMX3IHXF0=
+155	ROBOTS_FILE	eJxdyrEKwjAQgOG9T5GtULCpkxJwEHyD4haQI4QkkNyF3LX6+ApO6fr9/zquSXyBalQUqUbrTA5yJBZzXS6L5n+ePyVbtPhk30734FGMmiw+EkPO9DZKg3O0obDudPv9B2p+T5wID8wemosdFRAXE4aXQOCuTExNbhbHoZ6H+QthmkaF
+133	STATIC_PAGE_REGISTRY	eJzTSNEDAAFxALs=
+134	SITE_KEY	T[str]R4gz-ajPb-xlt4-PH3B
+135	EDITABLE_SCREEN_NAME	eJzzNDDg0gMAAwQA4g==
+136	TRUNCATE_LONG_USERNAMES	eJzzNDDk0gMAAwcA4w==
+137	HOLD_PENDING_POSTS_MINUTES	T[int]120
+138	WARN_PENDING_POSTS_MINUTES	T[int]15
+139	TEST_EMAIL_SETTINGS	T[str]
+104	ANNOUNCEMENT_BAR_RENDER_MODE	T[str]html
+140	EMAIL_PORT	T[int]25
+34	SIDEBAR_UPPER_TEXT	T[unicode]<img src="/upfiles/chraz-robot1.jpg" alt="chrazVsRobot">\r\n
+141	EMAIL_USE_TLS	eJzzNDDg0gMAAwQA4g==
+103	ANNOUNCEMENT_BAR	eJx1U7Fu20AM3QP0H4gsXgzHHboZAQIP2YpOnbrQ0sViobtTyDsj6dd6jPYs3fp4ctMURRfpZPIe33t8/robPt3eRTHS2cQKp2JrOuT0PVdd725Q/fCtbrdbvrx20+0+kEkJFBJ1OVnR2hXJiYIV6vGQNNOZJpWTjPNRgtIYjIYaWZLRxErK05S1ENcn6ljMUOdacuQijxUfj3VF1zldUwkJk/pAMZSiGAxaKYuFiAKmjKEqTSN3Ye18HgAGCX40DAgOJCM9E0tBWzXqV1x+g5681bk1DvKibfJflcjdICnAE36Q5ERSBsqEh0FYz1DkHIwOyuZ1kLGmYrO7mf4173N2GYdaLnbRFNQq980ljHuSWGMTnFPflHcD9IpSTUtzTn4Ya3ktLq8m0nzI5Q/DsUpbTNATUM03E6cxC4VlYK6nDDy0YFUVLWecY6zJWSu8c4YDH6SloSGyy0ov5T+i9kNQ0HQvVsuesU6yCrqRUZnX/j3NfGyKxpUvW3Mt2NrZ0b9kezvfs/oyiyeloIfyT2rpMn4ObxvApsGy0+yvxYayLKAT7aqAuERkMM62XNCQemW4iCjJ2HLjDkl3uf7OXD6FDj+Kj4Vbqp6euRs4HeEPTBpbSGP2/wr6ECgPfNAeXBpSlmOal9zC4hKWPkIJM+E7tBmdgNti7DcBuKF35sLVOzoIyq9lQ/tB+YdXr6aPV5tfGP9bgw==
+142	DEFAULT_FROM_EMAIL	T[str]
+143	DEFAULT_REPLY_TO_EMAIL	T[str]
+144	SEND_DIGEST_ONLY_TO_ACTIVE_USERS	eJzzNDDk0gMAAwcA4w==
+145	SEND_DIGEST_ONLY_TO_VALIDATED_USERS	eJzzNDDk0gMAAwcA4w==
+146	REP_GAIN_BY_UPVOTED	T[int]10
+147	REP_LOST_BY_DOWNVOTED	T[int]2
+148	REP_TO_COMMENT	T[int]50
+149	REP_TO_DELETE_COMMENTS	T[int]2000
+150	REP_TO_CLOSE_OWN	T[int]250
+151	REP_TO_REOPEN_OWN	T[int]500
+152	REP_TO_RETAG	T[int]500
+153	REP_TO_EDIT_OTHERS	T[int]2000
+154	REP_TO_CLOSE_OTHERS	T[int]3000
+156	FLAG_TYPES	eJwljrsOgzAMAHe+whsd+qLvjqhTh7YDUvfQOmAJ7CgxSP37JrDFdyfHi84VWZVXzvR55naZqfLyO6JXCsRNRPuEXtYiBxpxCWU9zA/xcGfjnBfnySjG9pDam7AiK4wkXcQBFH0fQCwMIUXHOXI/T02r8J4yEo7qlNSDQofmO/9+TqSSHoURKACLQo3RAdMnbbuk4Bmpxw5Hw7oRa1cqjj7RXqfjtUUfh2KbmfUfWBFO2A==
+122	QUESTION_TITLE_TIPS	eJxFzDEOAjEMBMD+JP6w3VWg8Amqq6loopwjWUpsiO1P8hN4BbmKbrWa3TvO2AjOPgi7suN7JNMwtIyqo89+DSG8gsxZ5fSIlFKew5vGEB6wqJUt907i2Kf/eOZmf/g+PkvL05KjqBS25XldLj8qtyw6
+157	CLOSE_TYPES	eJxNjksOwjAMRPc9hXdlAUj8L8AeULmAm7g0KI1D4rTXJ6EgsXzjN9YsrN9UTX1O3hqFQnBLFMWwqyu/rbCpfwwmAnfdStgbBRzAsUAgSyM6yfKuyHdmiKl9khIzEqDTgOGRBnKCJcne/uP1BK+/x+jiRIH0EoJ59PJlmDCflCIvpHP1UKrXwK2lobTmBT6wTsrksKziJBpn/Vj0i/QUMpwqXL8Bzp5RKg==
+158	REPORT_OFFENSIVE_CONTROL_POSITION	T[str]more
+100	FAQ_PAGE_TEXT	eJyNWE1vI0UTviPxH1q5mI0cO3B7OYBC4l1WysYhyQahBUXtmfakw0z30N3jN4v2D/IvIk6ZPXDiwo2nqufTToBD5Himuz6eqnqqytf7+y+tdkrI6l78UikftDVefPby6LsX+/uf/lgdHh7K5mN/f2FwxmpRGeF1UCJV4rv2zvyiLvGhvEj1ev0IkekE59bWVYX4WmwLe9uL6NTOXSsCD1hM7ZQJQ0HhfalxXpTSJXRzonPhlUisSXASSn3lRC6FU8mtcvgjBZ3YsZN4Qw8LVayc8jPxdkvJVCgDQRtpIGeKdyahiwba88pDZ1EogiJztipZUap9UnmPQ1Nh/xI5pGcKmryFF7kmNXyMhMBMBVvlRvspn+yspMNBmRR6lXgQH8kt1uir1Z2CDRtYO0bzcgCBixhAUO+qCiMVU1EqV+AhjFnLROeIxBZsdEOSj6Wrb+ED+xRsFQiUeqODpMCQP/XKulQV0A0MtzMG6ZETBm4caVFW2h/cwS/roVkn+uvtBDkdOZBaeA2NEQzlgjb4qqJnuubYwu87fA1O6lC3AB1toqGNpsr0ViDyLtH0rnEayFE+mcl7IZFhfnza60LnErUyE9cW0ShttVG/9pA5hmPgonQiaNg7pdggoJWwlShs8AdJXm9H8HmoUrUhj6LrhDy83UHrNzyHMZ2fY1N+qTS8orwir6giZFlaF5B9KqE4l7c6t97iA8orrsyn7Gts4ciRJaRIGiqhPreeMy2PuSKDj3c2dpiPOt/J++wjF8nkVrrCGhgWC3yU1K2AmTi3FXktVu5xwxyESuRj0zbME3zPtVexNrh6TaB4dqEQonOW5THX0WFjg17rRPaBLSQRD1mscjrhtdAFQSo5K3f57nRXDJdgoKwmXmpoCHZyoLUBFxW150jWm0cTK6zX4sWXWxESp9Z5UOIoa+0qaFJBDxu0ds9TAL3MFPNug0zNfuKdrMieaN7WVcXo8IGORykB2SkEw1CJ5CMqmg54rhpFgcrE4RNvU/bvITJkQ+zpj9UXh5//T8My9zFsg4vaT5JHZJSi/I8MOAFWeQM3w9hYCEUTcrRsQ0zYyBRvcJMDu5G5TiMa9A7lm2qWYuqEkKKGSbcJogDyQigpG7sEQ/4+UUKXGkkP4vgYuBTuHhqDmIEoExiOygDPmsSZiSSCoZJlg2pcJySGpk6jyIaLcqJzMu4djPrps7lMEluZMPeoqgOWwWDMxd51/KLEgh0+Slnm3ouZEK2ZZsKGknplEBr1D+YiqurO6szACEOX3yWuZrqNOSA51GVQA6Nym8h87lSmkS8ONh07RRZJYdT/RXMKFo1BFEREWkijiydQ2yGfY4709fLt5Uwcx6hwWOl+zHDKzhg4KK9cRwancii4CS1PPu99eCwYhp9BTZLZtemnVMhDYahmFKAyOjJy6qwOPqaOWq/RyyvOFhQ0+pkX4Xf0ESbowqa142Dt8PBxrJnhPIK4b1u120+fIodqyAsDrqBM41aCtF9jPJkMnGJ/MQQQjPkE6NCzTGZRcE7CcRN1ikKjo8yS6DcKTU/sxTedmXsUlvY8xjG3aagDjFRRrpels/e6kDT10HMeSsxac5Nov/dVYzYKqOdQO2dmnokTTY+eATcaBxUZpT9OMrKSQ1M3A+Monsp0uMc6aG3fCtM5MkvdKxAQ2r/XbZV61McoAkxnRCloGxQOHg1/HUWF9KtpU/tlteooLYYrdXI7YHB60hF38idwYQu274NfuLozJ00qGmKdMmw01VCr7ySbOpMs+fhWEu8P1UXn1grHOQ2c+HCxOL95dfT67OabH27enl8vrxYnH7qkSAYiGrkDEagkcFEUcbq8vCIRJ8vvz0ZCZuJ1LmhKI6ByDGZxk/ji8LBNJWJE2Q6MIJOqqCj/qOKH6d+APBNoIUGucmYqfYBi9WSRukcHaftchiLtMzdWceMLNgY2gHPsn+tXHN1him5GtGH/Ewdfiej21fLmePnmzeLs6kN367JCJYDznr7XXjtZnC6uFu3ty/76S+InzLeSkr0cjFHD28fAe3EDrPt7F4DR6X+7eLFYni/OxjffWCxwupm2uqmXd7nnhFwdvervL1KeL2nl6GthcHxx8vrqZnn17eJi4OYyWmsmcUyKjJQP9CHFilo94fSWoB7usawh8v8B+MHwTI3oIO6svDPKjQzSPdOweNHyNL9ERiLMQIKZiow6AUNpyrSHWN6p4nG6meJ8twBSu/Pie7WKPQrLNG1NRGLIW5dx40BYg00s/mtt4mJov3DFpPUaZEJkLJ38I/SrbyKdq0EWNGg1oV3rjIi7O7JGn49kaZTOtpYnpnI67xp+ik6S/Z01kLSN5vnW7PXwxECCjZH3lG4QiQPIDuDnYMB+rCO0xzMV/58QLSeUj5n7nbcTGgTQrXSiOmzTAbDLUpnXJ9MGhlfWZsThP8hba6fiaHkKmg2JeHc5wZxpQiwUTGK0JoK1hqMbhipNE9upzbTZe/EUFDzEppNmDgcgnsyl/ypup0VbisVwEp8/u7Gdx82k+VWonevBhTWVBPqE3+28tHkSBvQTDBh4vIDO+0VPFnWuaZjMaXDCFIq7WW5XMufNs9mUZzSFJiqnWbCLwIaHE3SsaZwxaVfgoFheJ7nZ3Vp9vzMxccbxLN0MsiPjdtw/i5vGbe15caUW+YArBbqkctNoFpE/mhXbUXZwIQaNe27oH29C/OMULQWflJ9/MvsbTQURXA==
+\.
+
+
+--
+-- Data for Name: forum_markedtag; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_markedtag (id, tag_id, user_id, reason) FROM stdin;
+\.
+
+
+--
+-- Data for Name: forum_node; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_node (id, title, tagnames, author_id, body, node_type, parent_id, abs_parent_id, added_at, score, state_string, last_edited_id, last_activity_by_id, last_activity_at, active_revision_id, extra, extra_ref_id, extra_count, marked) FROM stdin;
+4			1	<p>c'est bon ça ^^</p>	answer	3	3	2012-11-09 15:43:20.975203+01	0		\N	1	2012-11-09 15:55:10.613363+01	4	\N	\N	0	f
+3	comment ça va?	bien ou	1	<p>comment allez-vous?</p>	question	\N	\N	2012-11-01 18:52:06.705834+01	0		\N	1	2012-11-09 15:55:10.613363+01	3	\N	\N	4	f
+2			1	<p>oui ça marche très bien</p>	answer	1	1	2012-10-28 23:04:08.893504+01	0	(accepted)	\N	1	2012-11-09 16:28:34.088274+01	2	\N	\N	0	t
+5			1	<p>bonne reponse</p>	comment	2	1	2012-11-09 16:28:34.088274+01	0		\N	1	2012-11-09 16:28:34.088274+01	5	\N	\N	0	f
+1	Est ce que ça marche?	fonctionnement	1	<p>est ce que ça marche?</p>	question	\N	\N	2012-10-28 23:03:27.199364+01	0		\N	1	2012-11-09 16:28:34.088274+01	1	\N	\N	4	f
+\.
+
+
+--
+-- Data for Name: forum_node_tags; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_node_tags (id, node_id, tag_id) FROM stdin;
+1	1	1
+2	3	2
+3	3	3
+\.
+
+
+--
+-- Data for Name: forum_noderevision; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_noderevision (id, title, tagnames, author_id, body, node_id, summary, revision, revised_at) FROM stdin;
+1	Est ce que ça marche?	fonctionnement	1	est ce que ça marche?\r\n	1		1	2012-10-28 23:03:27.203498+01
+2			1	oui ça marche très bien\r\n	2		1	2012-10-28 23:04:08.895539+01
+3	comment ça va?	bien ou	1	comment allez-vous?	3		1	2012-11-01 18:52:06.839733+01
+4			1	c'est bon ça ^^	4		1	2012-11-09 15:43:21.074782+01
+5			1	bonne reponse	5		1	2012-11-09 16:28:34.120341+01
+\.
+
+
+--
+-- Data for Name: forum_nodestate; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_nodestate (id, node_id, state_type, action_id) FROM stdin;
+2	2	accepted	11
+\.
+
+
+--
+-- Data for Name: forum_openidassociation; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_openidassociation (id, server_url, handle, secret, issued, lifetime, assoc_type) FROM stdin;
+\.
+
+
+--
+-- Data for Name: forum_openidnonce; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_openidnonce (id, server_url, "timestamp", salt) FROM stdin;
+\.
+
+
+--
+-- Data for Name: forum_questionsubscription; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_questionsubscription (id, user_id, question_id, auto_subscription, last_view) FROM stdin;
+2	1	3	t	2012-11-09 15:55:10.928036+01
+1	1	1	t	2012-11-09 18:12:45.920834+01
+\.
+
+
+--
+-- Data for Name: forum_rootnode_doc; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_rootnode_doc (node_id, document) FROM stdin;
+1	'ce':3B,8C 'est':2B,7C 'fonctionn':1A 'march':6B,11C 'que':4B,9C 'ça':5B,10C
+2	'bien':5C 'march':3C 'oui':1C 'très':4C 'ça':2C
+3	'allez':8C 'allez-v':7C 'bien':1A 'comment':3B,6C 'ou':2A 'va':5B 'vous':9C 'ça':4B
+4	'bon':3C 'c':1C 'est':2C 'ça':4C
+5	'bonn':1C 'repons':2C
+\.
+
+
+--
+-- Data for Name: forum_subscriptionsettings; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_subscriptionsettings (id, user_id, enable_notifications, member_joins, new_question, new_question_watched_tags, subscribed_questions, all_questions, all_questions_watched_tags, questions_viewed, notify_answers, notify_reply_to_comments, notify_comments_own_post, notify_comments, notify_accepted, send_digest) FROM stdin;
+1	1	t	n	n	i	i	f	f	f	t	t	t	f	f	t
+2	2	t	n	n	i	i	f	f	f	t	t	t	f	f	t
+\.
+
+
+--
+-- Data for Name: forum_tag; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_tag (id, name, created_by_id, created_at, used_count) FROM stdin;
+1	fonctionnement	1	2012-10-28 23:03:27.308228+01	1
+2	bien	1	2012-11-01 18:52:07.025605+01	1
+3	ou	1	2012-11-01 18:52:07.128744+01	1
+\.
+
+
+--
+-- Data for Name: forum_user; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_user (user_ptr_id, is_approved, email_isvalid, reputation, gold, silver, bronze, last_seen, real_name, website, location, date_of_birth, about) FROM stdin;
+2	f	f	1	0	0	0	2012-11-08 12:53:33.852282+01				\N	
+1	f	f	1	0	0	1	2012-10-28 21:59:08.222862+01				\N	
+\.
+
+
+--
+-- Data for Name: forum_userproperty; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_userproperty (id, user_id, key, value) FROM stdin;
+2	2	pagination	eJzTSCkw5ApWDwx1DQ7x9PcLjvfxDA5R5yow4tJIKTDmKg5WDw12DYqHycOkTUDSpnBpR7/gcCAFlTQDSZrDJOFGWoCELbmK9QBX4x/X
+1	1	pagination	eJxVjs0KwjAQhO/7FL21J+na1p9jqEECGrEbK56C0FIE0WDoxac3W0jBwx52vtnZyTqHQKnQdJWNPSgyKbglZJ0rwFN6IdlQlEuWqyjb/5sVwzVDsTsqbRtZS22sqI1qlbkFx4Yd2/n8fJFk1EnHAMyZI7Ihsvk1TpWwgPb5fg1jP36Srk/cfegDK0FVOfiWV//4slSBCuNDlBH7OWTqiKHk4gcCp0SG
+\.
+
+
+--
+-- Data for Name: forum_validationhash; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_validationhash (id, hash_code, seed, expiration, type, user_id) FROM stdin;
+1	1b1229b8901aca40259ac2458800dc03	KS3kQPefYc5z	2012-10-29 21:59:08.322761+01	email	1
+2	24dcf912c1307debe2b6c002ff1dd43c	M67Sd83Kuant	2012-11-09 12:53:34.163694+01	email	2
+\.
+
+
+--
+-- Data for Name: forum_vote; Type: TABLE DATA; Schema: public; Owner: gono63
+--
+
+COPY forum_vote (id, user_id, node_id, value, action_id, voted_at) FROM stdin;
+\.
+
+
+--
+-- Name: auth_group_name_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_group
+    ADD CONSTRAINT auth_group_name_key UNIQUE (name);
+
+
+--
+-- Name: auth_group_permissions_group_id_permission_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_group_id_permission_id_key UNIQUE (group_id, permission_id);
+
+
+--
+-- Name: auth_group_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_group_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_group
+    ADD CONSTRAINT auth_group_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_message_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_message
+    ADD CONSTRAINT auth_message_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_permission_content_type_id_codename_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_permission
+    ADD CONSTRAINT auth_permission_content_type_id_codename_key UNIQUE (content_type_id, codename);
+
+
+--
+-- Name: auth_permission_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_permission
+    ADD CONSTRAINT auth_permission_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user_groups
+    ADD CONSTRAINT auth_user_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_groups_user_id_group_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user_groups
+    ADD CONSTRAINT auth_user_groups_user_id_group_id_key UNIQUE (user_id, group_id);
+
+
+--
+-- Name: auth_user_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user
+    ADD CONSTRAINT auth_user_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_user_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_user_permissions_user_id_permission_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_user_id_permission_id_key UNIQUE (user_id, permission_id);
+
+
+--
+-- Name: auth_user_username_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY auth_user
+    ADD CONSTRAINT auth_user_username_key UNIQUE (username);
+
+
+--
+-- Name: django_admin_log_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY django_admin_log
+    ADD CONSTRAINT django_admin_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: django_content_type_app_label_model_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY django_content_type
+    ADD CONSTRAINT django_content_type_app_label_model_key UNIQUE (app_label, model);
+
+
+--
+-- Name: django_content_type_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY django_content_type
+    ADD CONSTRAINT django_content_type_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: django_session_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY django_session
+    ADD CONSTRAINT django_session_pkey PRIMARY KEY (session_key);
+
+
+--
+-- Name: django_site_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY django_site
+    ADD CONSTRAINT django_site_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_action_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_action
+    ADD CONSTRAINT forum_action_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_actionrepute_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_actionrepute
+    ADD CONSTRAINT forum_actionrepute_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_authkeyuserassociation_key_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_authkeyuserassociation
+    ADD CONSTRAINT forum_authkeyuserassociation_key_key UNIQUE (key);
+
+
+--
+-- Name: forum_authkeyuserassociation_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_authkeyuserassociation
+    ADD CONSTRAINT forum_authkeyuserassociation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_award_action_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_action_id_key UNIQUE (action_id);
+
+
+--
+-- Name: forum_award_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_award_user_id_badge_id_node_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_user_id_badge_id_node_id_key UNIQUE (user_id, badge_id, node_id);
+
+
+--
+-- Name: forum_badge_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_badge
+    ADD CONSTRAINT forum_badge_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_flag_action_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_action_id_key UNIQUE (action_id);
+
+
+--
+-- Name: forum_flag_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_flag_user_id_node_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_user_id_node_id_key UNIQUE (user_id, node_id);
+
+
+--
+-- Name: forum_keyvalue_key_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_keyvalue
+    ADD CONSTRAINT forum_keyvalue_key_key UNIQUE (key);
+
+
+--
+-- Name: forum_keyvalue_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_keyvalue
+    ADD CONSTRAINT forum_keyvalue_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_markedtag_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_markedtag
+    ADD CONSTRAINT forum_markedtag_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_node_active_revision_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT forum_node_active_revision_id_key UNIQUE (active_revision_id);
+
+
+--
+-- Name: forum_node_last_edited_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT forum_node_last_edited_id_key UNIQUE (last_edited_id);
+
+
+--
+-- Name: forum_node_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT forum_node_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_node_tags_node_id_tag_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_node_tags
+    ADD CONSTRAINT forum_node_tags_node_id_tag_id_key UNIQUE (node_id, tag_id);
+
+
+--
+-- Name: forum_node_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_node_tags
+    ADD CONSTRAINT forum_node_tags_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_noderevision_node_id_revision_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_noderevision
+    ADD CONSTRAINT forum_noderevision_node_id_revision_key UNIQUE (node_id, revision);
+
+
+--
+-- Name: forum_noderevision_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_noderevision
+    ADD CONSTRAINT forum_noderevision_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_nodestate_action_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_nodestate
+    ADD CONSTRAINT forum_nodestate_action_id_key UNIQUE (action_id);
+
+
+--
+-- Name: forum_nodestate_node_id_state_type_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_nodestate
+    ADD CONSTRAINT forum_nodestate_node_id_state_type_key UNIQUE (node_id, state_type);
+
+
+--
+-- Name: forum_nodestate_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_nodestate
+    ADD CONSTRAINT forum_nodestate_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_openidassociation_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_openidassociation
+    ADD CONSTRAINT forum_openidassociation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_openidnonce_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_openidnonce
+    ADD CONSTRAINT forum_openidnonce_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_questionsubscription_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_questionsubscription
+    ADD CONSTRAINT forum_questionsubscription_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_rootnode_doc_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_rootnode_doc
+    ADD CONSTRAINT forum_rootnode_doc_pkey PRIMARY KEY (node_id);
+
+
+--
+-- Name: forum_subscriptionsettings_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_subscriptionsettings
+    ADD CONSTRAINT forum_subscriptionsettings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_subscriptionsettings_user_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_subscriptionsettings
+    ADD CONSTRAINT forum_subscriptionsettings_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: forum_tag_name_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_tag
+    ADD CONSTRAINT forum_tag_name_key UNIQUE (name);
+
+
+--
+-- Name: forum_tag_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_tag
+    ADD CONSTRAINT forum_tag_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_user_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_user
+    ADD CONSTRAINT forum_user_pkey PRIMARY KEY (user_ptr_id);
+
+
+--
+-- Name: forum_userproperty_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_userproperty
+    ADD CONSTRAINT forum_userproperty_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_userproperty_user_id_key_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_userproperty
+    ADD CONSTRAINT forum_userproperty_user_id_key_key UNIQUE (user_id, key);
+
+
+--
+-- Name: forum_validationhash_hash_code_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_validationhash
+    ADD CONSTRAINT forum_validationhash_hash_code_key UNIQUE (hash_code);
+
+
+--
+-- Name: forum_validationhash_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_validationhash
+    ADD CONSTRAINT forum_validationhash_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_validationhash_user_id_type_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_validationhash
+    ADD CONSTRAINT forum_validationhash_user_id_type_key UNIQUE (user_id, type);
+
+
+--
+-- Name: forum_vote_action_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_action_id_key UNIQUE (action_id);
+
+
+--
+-- Name: forum_vote_pkey; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: forum_vote_user_id_node_id_key; Type: CONSTRAINT; Schema: public; Owner: gono63; Tablespace: 
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_user_id_node_id_key UNIQUE (user_id, node_id);
+
+
+--
+-- Name: auth_group_permissions_group_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_group_permissions_group_id ON auth_group_permissions USING btree (group_id);
+
+
+--
+-- Name: auth_group_permissions_permission_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_group_permissions_permission_id ON auth_group_permissions USING btree (permission_id);
+
+
+--
+-- Name: auth_message_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_message_user_id ON auth_message USING btree (user_id);
+
+
+--
+-- Name: auth_permission_content_type_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_permission_content_type_id ON auth_permission USING btree (content_type_id);
+
+
+--
+-- Name: auth_user_groups_group_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_user_groups_group_id ON auth_user_groups USING btree (group_id);
+
+
+--
+-- Name: auth_user_groups_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_user_groups_user_id ON auth_user_groups USING btree (user_id);
+
+
+--
+-- Name: auth_user_user_permissions_permission_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_user_user_permissions_permission_id ON auth_user_user_permissions USING btree (permission_id);
+
+
+--
+-- Name: auth_user_user_permissions_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX auth_user_user_permissions_user_id ON auth_user_user_permissions USING btree (user_id);
+
+
+--
+-- Name: django_admin_log_content_type_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX django_admin_log_content_type_id ON django_admin_log USING btree (content_type_id);
+
+
+--
+-- Name: django_admin_log_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX django_admin_log_user_id ON django_admin_log USING btree (user_id);
+
+
+--
+-- Name: django_session_expire_date; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX django_session_expire_date ON django_session USING btree (expire_date);
+
+
+--
+-- Name: doctable_tsv; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX doctable_tsv ON forum_rootnode_doc USING gin (document);
+
+
+--
+-- Name: forum_action_canceled_by_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_action_canceled_by_id ON forum_action USING btree (canceled_by_id);
+
+
+--
+-- Name: forum_action_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_action_node_id ON forum_action USING btree (node_id);
+
+
+--
+-- Name: forum_action_real_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_action_real_user_id ON forum_action USING btree (real_user_id);
+
+
+--
+-- Name: forum_action_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_action_user_id ON forum_action USING btree (user_id);
+
+
+--
+-- Name: forum_actionrepute_action_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_actionrepute_action_id ON forum_actionrepute USING btree (action_id);
+
+
+--
+-- Name: forum_actionrepute_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_actionrepute_user_id ON forum_actionrepute USING btree (user_id);
+
+
+--
+-- Name: forum_authkeyuserassociation_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_authkeyuserassociation_user_id ON forum_authkeyuserassociation USING btree (user_id);
+
+
+--
+-- Name: forum_award_badge_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_award_badge_id ON forum_award USING btree (badge_id);
+
+
+--
+-- Name: forum_award_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_award_node_id ON forum_award USING btree (node_id);
+
+
+--
+-- Name: forum_award_trigger_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_award_trigger_id ON forum_award USING btree (trigger_id);
+
+
+--
+-- Name: forum_award_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_award_user_id ON forum_award USING btree (user_id);
+
+
+--
+-- Name: forum_flag_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_flag_node_id ON forum_flag USING btree (node_id);
+
+
+--
+-- Name: forum_flag_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_flag_user_id ON forum_flag USING btree (user_id);
+
+
+--
+-- Name: forum_markedtag_tag_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_markedtag_tag_id ON forum_markedtag USING btree (tag_id);
+
+
+--
+-- Name: forum_markedtag_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_markedtag_user_id ON forum_markedtag USING btree (user_id);
+
+
+--
+-- Name: forum_node_abs_parent_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_abs_parent_id ON forum_node USING btree (abs_parent_id);
+
+
+--
+-- Name: forum_node_author_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_author_id ON forum_node USING btree (author_id);
+
+
+--
+-- Name: forum_node_extra_ref_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_extra_ref_id ON forum_node USING btree (extra_ref_id);
+
+
+--
+-- Name: forum_node_last_activity_by_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_last_activity_by_id ON forum_node USING btree (last_activity_by_id);
+
+
+--
+-- Name: forum_node_parent_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_parent_id ON forum_node USING btree (parent_id);
+
+
+--
+-- Name: forum_node_tags_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_tags_node_id ON forum_node_tags USING btree (node_id);
+
+
+--
+-- Name: forum_node_tags_tag_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_node_tags_tag_id ON forum_node_tags USING btree (tag_id);
+
+
+--
+-- Name: forum_noderevision_author_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_noderevision_author_id ON forum_noderevision USING btree (author_id);
+
+
+--
+-- Name: forum_noderevision_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_noderevision_node_id ON forum_noderevision USING btree (node_id);
+
+
+--
+-- Name: forum_nodestate_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_nodestate_node_id ON forum_nodestate USING btree (node_id);
+
+
+--
+-- Name: forum_questionsubscription_question_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_questionsubscription_question_id ON forum_questionsubscription USING btree (question_id);
+
+
+--
+-- Name: forum_questionsubscription_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_questionsubscription_user_id ON forum_questionsubscription USING btree (user_id);
+
+
+--
+-- Name: forum_tag_created_by_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_tag_created_by_id ON forum_tag USING btree (created_by_id);
+
+
+--
+-- Name: forum_userproperty_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_userproperty_user_id ON forum_userproperty USING btree (user_id);
+
+
+--
+-- Name: forum_validationhash_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_validationhash_user_id ON forum_validationhash USING btree (user_id);
+
+
+--
+-- Name: forum_vote_node_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_vote_node_id ON forum_vote USING btree (node_id);
+
+
+--
+-- Name: forum_vote_user_id; Type: INDEX; Schema: public; Owner: gono63; Tablespace: 
+--
+
+CREATE INDEX forum_vote_user_id ON forum_vote USING btree (user_id);
+
+
+--
+-- Name: tsvectorupdate; Type: TRIGGER; Schema: public; Owner: gono63
+--
+
+CREATE TRIGGER tsvectorupdate BEFORE INSERT OR UPDATE ON forum_noderevision FOR EACH ROW EXECUTE PROCEDURE set_doctable_tsv();
+
+
+--
+-- Name: abs_parent_id_refs_id_1d7ae97d; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT abs_parent_id_refs_id_1d7ae97d FOREIGN KEY (abs_parent_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: action_id_refs_id_4b387511; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_nodestate
+    ADD CONSTRAINT action_id_refs_id_4b387511 FOREIGN KEY (action_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: active_revision_id_refs_id_5a9f972a; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT active_revision_id_refs_id_5a9f972a FOREIGN KEY (active_revision_id) REFERENCES forum_noderevision(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_group_permissions_permission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES auth_permission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_message_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_message
+    ADD CONSTRAINT auth_message_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_groups_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_groups
+    ADD CONSTRAINT auth_user_groups_group_id_fkey FOREIGN KEY (group_id) REFERENCES auth_group(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_user_permissions_permission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES auth_permission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: content_type_id_refs_id_728de91f; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_permission
+    ADD CONSTRAINT content_type_id_refs_id_728de91f FOREIGN KEY (content_type_id) REFERENCES django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: django_admin_log_content_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY django_admin_log
+    ADD CONSTRAINT django_admin_log_content_type_id_fkey FOREIGN KEY (content_type_id) REFERENCES django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: django_admin_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY django_admin_log
+    ADD CONSTRAINT django_admin_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: extra_ref_id_refs_id_1d7ae97d; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT extra_ref_id_refs_id_1d7ae97d FOREIGN KEY (extra_ref_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_action_canceled_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_action
+    ADD CONSTRAINT forum_action_canceled_by_id_fkey FOREIGN KEY (canceled_by_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_action_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_action
+    ADD CONSTRAINT forum_action_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_action_real_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_action
+    ADD CONSTRAINT forum_action_real_user_id_fkey FOREIGN KEY (real_user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_action_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_action
+    ADD CONSTRAINT forum_action_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_actionrepute_action_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_actionrepute
+    ADD CONSTRAINT forum_actionrepute_action_id_fkey FOREIGN KEY (action_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_actionrepute_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_actionrepute
+    ADD CONSTRAINT forum_actionrepute_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_authkeyuserassociation_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_authkeyuserassociation
+    ADD CONSTRAINT forum_authkeyuserassociation_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_award_action_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_action_id_fkey FOREIGN KEY (action_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_award_badge_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_badge_id_fkey FOREIGN KEY (badge_id) REFERENCES forum_badge(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_award_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_award_trigger_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_award_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_award
+    ADD CONSTRAINT forum_award_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_flag_action_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_action_id_fkey FOREIGN KEY (action_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_flag_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_flag_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_flag
+    ADD CONSTRAINT forum_flag_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_markedtag_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_markedtag
+    ADD CONSTRAINT forum_markedtag_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES forum_tag(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_markedtag_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_markedtag
+    ADD CONSTRAINT forum_markedtag_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_node_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT forum_node_author_id_fkey FOREIGN KEY (author_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_node_last_activity_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT forum_node_last_activity_by_id_fkey FOREIGN KEY (last_activity_by_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_node_tags_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node_tags
+    ADD CONSTRAINT forum_node_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES forum_tag(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_noderevision_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_noderevision
+    ADD CONSTRAINT forum_noderevision_author_id_fkey FOREIGN KEY (author_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_noderevision_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_noderevision
+    ADD CONSTRAINT forum_noderevision_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_nodestate_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_nodestate
+    ADD CONSTRAINT forum_nodestate_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_questionsubscription_question_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_questionsubscription
+    ADD CONSTRAINT forum_questionsubscription_question_id_fkey FOREIGN KEY (question_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_questionsubscription_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_questionsubscription
+    ADD CONSTRAINT forum_questionsubscription_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_rootnode_doc_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_rootnode_doc
+    ADD CONSTRAINT forum_rootnode_doc_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id);
+
+
+--
+-- Name: forum_subscriptionsettings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_subscriptionsettings
+    ADD CONSTRAINT forum_subscriptionsettings_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_tag_created_by_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_tag
+    ADD CONSTRAINT forum_tag_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_user_user_ptr_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_user
+    ADD CONSTRAINT forum_user_user_ptr_id_fkey FOREIGN KEY (user_ptr_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_userproperty_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_userproperty
+    ADD CONSTRAINT forum_userproperty_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_validationhash_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_validationhash
+    ADD CONSTRAINT forum_validationhash_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_vote_action_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_action_id_fkey FOREIGN KEY (action_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_vote_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_node_id_fkey FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: forum_vote_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_vote
+    ADD CONSTRAINT forum_vote_user_id_fkey FOREIGN KEY (user_id) REFERENCES forum_user(user_ptr_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: group_id_refs_id_3cea63fe; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_group_permissions
+    ADD CONSTRAINT group_id_refs_id_3cea63fe FOREIGN KEY (group_id) REFERENCES auth_group(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: last_edited_id_refs_id_2d978e9f; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT last_edited_id_refs_id_2d978e9f FOREIGN KEY (last_edited_id) REFERENCES forum_action(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: node_id_refs_id_6f4a2a92; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node_tags
+    ADD CONSTRAINT node_id_refs_id_6f4a2a92 FOREIGN KEY (node_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: parent_id_refs_id_1d7ae97d; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY forum_node
+    ADD CONSTRAINT parent_id_refs_id_1d7ae97d FOREIGN KEY (parent_id) REFERENCES forum_node(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: user_id_refs_id_7ceef80f; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_groups
+    ADD CONSTRAINT user_id_refs_id_7ceef80f FOREIGN KEY (user_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: user_id_refs_id_dfbab7d; Type: FK CONSTRAINT; Schema: public; Owner: gono63
+--
+
+ALTER TABLE ONLY auth_user_user_permissions
+    ADD CONSTRAINT user_id_refs_id_dfbab7d FOREIGN KEY (user_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM postgres;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+--
+-- PostgreSQL database dump complete
+--
+

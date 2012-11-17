@@ -1,7 +1,5 @@
 @import "jquery.autocomplete.css";
 
-/*test*/
-
 body {
     /*overflow-y: scroll;
     height: 100%; */
@@ -89,7 +87,7 @@ a:hover {
 
 h1 {
     font-family: 'Patrick Hand',"Lucida Grande", Lucida, Verdana, Arial, sans-serif;
-    font-size: 140%;
+    font-size: 130%;
     padding: 5px 0;
     line-height: 110%;
     overflow: hidden;
@@ -97,14 +95,14 @@ h1 {
 
 h2 {
     font-family: 'Patrick Hand',"Lucida Grande", Lucida, Verdana, Arial, sans-serif;
-    font-size: 135%;
+    font-size: 120%;
     padding: 3px 0;
     line-height: 110%;
 }
 
 h3 {
     font-family: 'Patrick Hand',"Lucida Grande", Lucida, Verdana, Arial, sans-serif;
-    font-size: 130%;
+    font-size: 115%;
     padding: 3px 0;
     line-height: 110%;
 }
@@ -417,7 +415,7 @@ div.qrcode-loader{
     display: block;
     float: left;
     font-family: 'Patrick Hand', "Lucida Grande", Helvetica, sans-serif;
-    font-size: 25px;
+    font-size: 22px;
     font-weight: bold;
     padding: 12px 13px 13px;
     text-decoration: none;
@@ -444,7 +442,7 @@ div.qrcode-loader{
     float:right; 
     padding-top: 7px;
     font-family: 'Patrick Hand', "Lucida Grande", Helvetica, sans-serif;
-    font-size: 22px;
+    font-size: 20px;
 }
 
 #question {
@@ -476,6 +474,7 @@ div.qrcode-loader{
 #topBar {
     width:100%;
 }
+
 
 #searchBar { float: left; padding-top: 7px; }
 
@@ -571,7 +570,7 @@ div.qrcode-loader{
 }
 .short-summary h2 a {
     color: #0f3f25;
-    font-size: 18px;
+    font-size: 16px;
     -moz-transition: color .4s;  /* FF4+ */
     -o-transition: color .4s;  /* Opera 10.5+ */
     -webkit-transition: color .4s;  /* Saf3.2+, Chrome */
@@ -821,7 +820,7 @@ a.medal:hover {
     margin-bottom: 3px;
     width: 100%;
     font-family: 'Patrick Hand', "Lucida Grande", Helvetica, sans-serif;
-    font-size: 19px;
+    font-size: 18px;
 }
 
 .tabsA {
@@ -878,7 +877,7 @@ a.medal:hover {
 .headQuestions {
     border-bottom: 0 solid #777777;
     float: left;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     height: 23px;
     line-height: 23px;
